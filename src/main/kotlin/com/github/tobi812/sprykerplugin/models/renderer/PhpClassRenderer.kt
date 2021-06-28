@@ -1,0 +1,115 @@
+package com.github.tobi812.sprykerplugin.models.renderer
+
+import com.github.tobi812.sprykerplugin.models.renderer.dto.DocBlockItem
+import com.github.tobi812.sprykerplugin.models.renderer.dto.PhpClassInterface
+import com.github.tobi812.sprykerplugin.models.renderer.dto.UseBlockItem
+import com.intellij.openapi.util.io.StreamUtil
+import com.intellij.openapi.util.text.StringUtil
+import java.io.IOException
+import java.io.InputStreamReader
+import java.io.Reader
+import java.nio.charset.StandardCharsets.UTF_8
+
+class PhpClassRenderer : PhpClassRendererInterface {
+    companion object {
+        private const val NAMESPACE = "{{ namespace }}"
+        private const val USE_BLOCK = "{{ useBlock }}\n"
+        private const val DOC_BLOCK = "{{ docBlock }}\n"
+        private const val CLASS_NAME = "{{ className }}"
+        private const val PARENT_CLASS = "{{ parentClass }}"
+        private const val INTERFACE_BLOCK = "{{ interfaceBlock }}"
+        private const val METHOD_BLOCK = "{{ methodBlock }}"
+        private const val TEMPLATE_PATH = "template/PhpClassTemplate.php.template"
+    }
+
+    override fun renderPhpClass(phpClass: PhpClassInterface): String {
+        var content = this.readFile(TEMPLATE_PATH)
+
+        if (content != "") {
+            content = content.replace(NAMESPACE, phpClass.namespace)
+            content = content.replace(USE_BLOCK, this.renderUseBlock(phpClass))
+            content = content.replace(DOC_BLOCK, this.renderDocBlock(phpClass.docBlockItems))
+            content = content.replace(CLASS_NAME, phpClass.name)
+            content = content.replace(PARENT_CLASS, renderParent(phpClass))
+            content = content.replace(INTERFACE_BLOCK, generateInterfaceBlock(phpClass))
+            content = content.replace(METHOD_BLOCK, generateMethodBlock(phpClass))
+        }
+
+        return content
+    }
+
+    override fun renderDocBlock(docBlockItems: List<DocBlockItem>): String {
+        if (docBlockItems.isEmpty()) {
+            return ""
+        }
+
+        var docBlock = "/**\n"
+        for (docBlockItem in docBlockItems) {
+            val docBlockElements = arrayOf<String>(
+                docBlockItem.tag,
+                docBlockItem.returnType,
+                docBlockItem.value
+            )
+            docBlock += " * @${StringUtil.join(docBlockElements, " ")}\n"
+        }
+
+        docBlock += " */\n"
+
+        return docBlock
+    }
+
+    private fun renderUseBlock(phpClass: PhpClassInterface): String {
+        val useBlockItems: List<UseBlockItem> = phpClass.useBlockItems
+        if (useBlockItems.size == 0) {
+            return ""
+        }
+        var useBlock = ""
+        for (useItem in phpClass.useBlockItems) {
+            useBlock += "use " + useItem.fullQualifiedClassName
+            if (useItem.alias != null) {
+                useBlock += " as " + useItem.alias
+            }
+            useBlock += ";\n"
+        }
+        return """
+            $useBlock
+            
+            """.trimIndent()
+    }
+
+    private fun renderParent(phpClass: PhpClassInterface): String {
+        val parentClass: PhpClassInterface = phpClass.parentClass ?: return ""
+        var parentClassName: String = parentClass.name
+
+        val parentAlias: String = phpClass.parentAlias as String
+        if (parentAlias.isNotBlank()) parentClassName = parentAlias
+
+        return " extends $parentClassName"
+    }
+
+    private fun generateMethodBlock(phpClass: PhpClassInterface): String {
+        return ""
+    }
+
+    private fun generateInterfaceBlock(phpClass: PhpClassInterface): String {
+        return ""
+    }
+
+    /**
+     *
+     * @param path String
+     * @return String
+     */
+    private fun readFile(path: String): String {
+        var content = ""
+        val reader: Reader = InputStreamReader(PhpClassRenderer::class.java.getResourceAsStream(path), UTF_8)
+        try {
+
+            content = StreamUtil.readText(reader)
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+
+        return content
+    }
+}
